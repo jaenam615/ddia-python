@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import Response, Request
 
-from src.chapter_one.request_wrapper import RequestWrapper
+from src.chapter_1.request_wrapper import RequestWrapper
 
 
 @pytest.fixture(scope="module")

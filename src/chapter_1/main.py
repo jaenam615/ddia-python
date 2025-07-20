@@ -1,7 +1,7 @@
 import httpx
 import asyncio
 
-from src.chapter_one.request_wrapper import RequestWrapper
+from src.chapter_1.request_wrapper import RequestWrapper
 
 if __name__ == '__main__':
     client = httpx.AsyncClient()
