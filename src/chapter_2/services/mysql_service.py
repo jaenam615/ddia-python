@@ -7,7 +7,7 @@ class MySQLService(DatabaseInterface):
         self.create_tables_if_not_exist()
 
     def create_resume(self):
-        self.create_dummy_data()
+        return self.create_dummy_data()
 
     def create_dummy_data(self):
         dummy = DummyData
