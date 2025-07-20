@@ -7,6 +7,8 @@ The goal of this project is to solidify understanding of distributed systems, da
 ---
 
 ## 📁 Project Structure
+
+```plaintext
 ddia-python/
 ├── src/                 # Source code organized by chapter
 │   ├── chapter_1/
@@ -19,7 +21,7 @@ ddia-python/
 ├── pyproject.toml       # Dependency and project configuration
 ├── uv.lock              # Lock file 
 └── docker-compose.yml   # Optional container setup for services 
-
+```
 ---
 
 ## 🚀 Getting Started
