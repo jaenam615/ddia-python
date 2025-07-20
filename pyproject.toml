@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
     "asyncio>=3.4.3",
+    "autobahn>=24.4.2",
     "autoflake>=2.3.1",
     "black>=25.1.0",
     "httpx>=0.28.1",
@@ -21,5 +22,6 @@ dev = [
     "pytest-tornasync>=0.6.0.post2",
     "pytest-trio>=0.8.0",
     "pytest-twisted>=1.14.3",
+    "twisted>=22.0.0",
     "setuptools>=80.9.0",
 ]
