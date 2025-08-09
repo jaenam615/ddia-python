@@ -3,7 +3,6 @@ import pytest
 from chapter_3.mini_db.index.lsm_index import LSMIndex
 
 
-@pytest.mark.skip(reason="index behavior covered indirectly; unit tests intentionally skipped")
 def test_lsm_put_get_delete():
     idx = LSMIndex()
     idx.put(b"a", ("mem", None, None, None))
