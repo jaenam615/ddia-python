@@ -87,3 +87,56 @@ class MiniDB:
 
     def flush(self):
         self._flush_memtable()
+
+    def compact(self):
+        """
+        Simple compaction without tombstones:
+        - Read all existing segments newest -> oldest
+        - For each key, keep the newest value (first seen)
+        - Write a new compacted segment and replace segment list with only it
+        Note: We do not delete old segment files here to preserve safety; caller
+        may clean up after verifying. For demo simplicity, we delete them.
+        """
+        # gather latest values
+        latest: dict[bytes, bytes] = {}
+        for base in self.sstable.segments:
+            # load index for this segment
+            import json, os
+            idx_path = os.path.join(self.data_dir, base + ".idx")
+            data_path = os.path.join(self.data_dir, base + ".data")
+            if not os.path.exists(idx_path):
+                continue
+            with open(idx_path, "r", encoding="utf-8") as ix:
+                idx = json.load(ix)
+            # iterate keys in this segment; if unseen, read value and record
+            for khex, (offset, length) in idx.items():
+                k = bytes.fromhex(khex)
+                if k in latest:
+                    continue
+                val = self.sstable.lookup_in_segment(base, k)
+                if val is not None:
+                    latest[k] = val
+        # write a new single segment from latest items
+        if not latest:
+            return
+        items = sorted(latest.items(), key=lambda kv: kv[0])
+        new_base = self.sstable.flush_memtable(items)
+        # update index to point to new segment
+        import json, os
+        idx_path = os.path.join(self.data_dir, new_base + ".idx")
+        with open(idx_path, "r", encoding="utf-8") as ix:
+            idx = json.load(ix)
+        for khex, (offset, length) in idx.items():
+            self.index.put(bytes.fromhex(khex), ("sst", new_base, offset, length))
+        # remove old segments (all except new_base)
+        old_bases = [b for b in list(self.sstable.segments) if b != new_base]
+        for base in old_bases:
+            for ext in (".data", ".idx", ".bloom"):
+                p = os.path.join(self.data_dir, base + ext)
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+        # keep only the new segment in the manager's list (newest first semantics)
+        self.sstable.segments = [new_base]

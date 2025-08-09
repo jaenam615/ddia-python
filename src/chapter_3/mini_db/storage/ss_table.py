@@ -1,6 +1,7 @@
 import os
 import json
 from chapter_3.mini_db.common.utils import pack_record, unpack_record
+from chapter_3.mini_db.common.bloom_filter import BloomFilter
 
 """
 A very simple SSTable representation:
@@ -50,25 +51,37 @@ class SSTableManager:
         base = f"segment_{seg_id}"
         data_path = os.path.join(self.path, base + ".data")
         idx_path = os.path.join(self.path, base + ".idx")
+        bloom_path = os.path.join(self.path, base + ".bloom")
         idx = {}
         offset = 0
+        keys_for_bloom: list[bytes] = []
         with open(data_path, "wb") as df:
             for k, v in items_sorted:
                 rec = pack_record(k, v)
                 df.write(rec)
                 idx[k.hex()] = (offset, len(rec))
                 offset += len(rec)
+                keys_for_bloom.append(k)
         # write index as json (mapping key_hex -> [offset,length])
         with open(idx_path, "w", encoding="utf-8") as ix:
             json.dump(idx, ix)
+        # build and write bloom filter
+        bf = BloomFilter.from_keys(keys_for_bloom, false_positive_rate=0.01)
+        bf.save_json(bloom_path)
         self.segments.insert(0, base)  # newest first for lookup
         return base
 
     def lookup_in_segment(self, base: str, key: bytes) -> bytes | None:
         data_path = os.path.join(self.path, base + ".data")
         idx_path = os.path.join(self.path, base + ".idx")
+        bloom_path = os.path.join(self.path, base + ".bloom")
         if not os.path.exists(idx_path):
             return None
+        # Bloom filter short-circuit for misses
+        if os.path.exists(bloom_path):
+            bf = BloomFilter.load_json(bloom_path)
+            if not bf.might_contain(key):
+                return None
         with open(idx_path, "r", encoding="utf-8") as ix:
             idx = json.load(ix)
         khex = key.hex()
