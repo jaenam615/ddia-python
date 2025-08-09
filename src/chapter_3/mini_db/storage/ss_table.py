@@ -18,12 +18,18 @@ class SSTableManager:
         self.path = path
         self._next_id = self._discover_next_id()
         self.segments: list[str] = []  # list of segment base names (without extension)
-        # load existing segments
+        # load existing segments and sort newest first
+        seg_nums: list[tuple[int, str]] = []
         for fname in os.listdir(self.path):
-            if fname.endswith(".idx"):
+            if fname.startswith("segment_") and fname.endswith(".idx"):
                 base = fname[:-4]
-                if base not in self.segments:
-                    self.segments.append(base)
+                try:
+                    seg_num = int(base.split("_")[1])
+                except Exception:
+                    continue
+                seg_nums.append((seg_num, base))
+        seg_nums.sort(reverse=True)
+        self.segments = [base for _, base in seg_nums]
 
     def _discover_next_id(self) -> int:
         existing = [int(f.split("_")[1].split(".")[0]) for f in os.listdir(self.path) if f.startswith("segment_") and f.endswith(".data")]
@@ -31,7 +37,7 @@ class SSTableManager:
             return 1
         return max(existing) + 1
 
-    def flush_memtable(self, items: list[tuple[bytes | bytes]]) -> str:
+    def flush_memtable(self, items: list[tuple[bytes, bytes]]) -> str:
         """
         items: list of (key, value) pairs. We will sort by key and write a new segment.
         Returns base segment name.

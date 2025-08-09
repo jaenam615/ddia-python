@@ -1,6 +1,6 @@
 # mini_db/storage/wal.py
 import os
-from chatper_3.mini_db.common.utils import pack_record, unpack_record
+from chapter_3.mini_db.common.utils import pack_record, unpack_record
 
 class WAL:
     """

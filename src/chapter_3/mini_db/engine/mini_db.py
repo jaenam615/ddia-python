@@ -73,9 +73,17 @@ class MiniDB:
             return self.mem.get(kb)
         elif loc[0] == "sst":
             _, base, offset, length = loc
-            return self.sstable.lookup_in_segment(base, kb)
+            # Try the pointed segment first
+            val = self.sstable.lookup_in_segment(base, kb)
+            if val is not None:
+                return val
+            # Fallback: search all segments (in case of compaction/rename later)
+            return self.sstable.lookup(kb)
         else:
             return None
 
     def close(self):
         self.wal.close()
+
+    def flush(self):
+        self._flush_memtable()
