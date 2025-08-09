@@ -3,10 +3,12 @@ from chapter_3.mini_db.storage.wal import WAL
 from chapter_3.mini_db.storage.memtable import MemTable
 from chapter_3.mini_db.storage.ss_table import SSTableManager
 from chapter_3.mini_db.index.hash_index import HashIndex
+from chapter_3.mini_db.interfaces.index_interface import IndexInterface
+from chapter_3.mini_db.interfaces.storage_engine_interface import StorageEngine
 
 DATA_ROOT_DEFAULT = "data_dir"
 
-class MiniDB:
+class MiniDB(StorageEngine):
     """
     Minimal DB implementing:
       - WAL append for durability
@@ -17,13 +19,13 @@ class MiniDB:
       - On startup, read WAL and populate memtable + index (mem entries)
       - Note: for simplicity, when flush occurs, we write SSTable and update index to point into SSTable
     """
-    def __init__(self, data_dir: str | None = None, mem_threshold: int = 100):
+    def __init__(self, data_dir: str | None = None, mem_threshold: int = 100, index: IndexInterface | None = None):
         self.data_dir = data_dir or DATA_ROOT_DEFAULT
         os.makedirs(self.data_dir, exist_ok=True)
         self.wal = WAL(self.data_dir)
         self.mem = MemTable()
         self.sstable = SSTableManager(self.data_dir)
-        self.index = HashIndex()
+        self.index: IndexInterface = index or HashIndex()
         self.mem_threshold = mem_threshold
         # recover WAL into memtable & index (mem-records)
         self._recover()
@@ -87,6 +89,14 @@ class MiniDB:
 
     def flush(self):
         self._flush_memtable()
+
+    # StorageEngine interface compatibility
+    def put(self, key: bytes, value: bytes) -> None:
+        # expose bytes-level API as well
+        self.db_set(key.decode(), value)
+
+    def get(self, key: bytes) -> bytes | None:
+        return self.db_get(key.decode())
 
     def compact(self):
         """
