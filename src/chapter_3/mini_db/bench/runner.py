@@ -1,4 +1,6 @@
 import time
+import os
+import shutil
 from dataclasses import dataclass
 from typing import Callable, List, Tuple
 
@@ -26,12 +28,22 @@ def _time_op(fn: Callable[[], None]) -> float:
     return t1 - t0
 
 
+def wipe_dir(path: str) -> None:
+    """Remove a directory tree if it exists (used to reset bench data)."""
+    if os.path.exists(path):
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def bench_index(
     index_ctor: Callable[[], object],
     data_dir: str,
     num_items: int = 1000,
     mem_threshold: int = 256,
+    clean_before: bool = False,
+    clean_after: bool = False,
 ) -> BenchResult:
+    if clean_before:
+        wipe_dir(data_dir)
     items = generate_kv_pairs(num_items)
 
     db = MiniDB(data_dir=data_dir, mem_threshold=mem_threshold, index=index_ctor())
@@ -58,6 +70,8 @@ def bench_index(
 
     # finalize
     db.close()
+    if clean_after:
+        wipe_dir(data_dir)
 
     return BenchResult(
         index_name=index_ctor.__name__,
@@ -69,7 +83,12 @@ def bench_index(
     )
 
 
-def run_all(data_root: str = "/tmp/mini_db_bench", num_items: int = 1000) -> List[BenchResult]:
+def run_all(
+    data_root: str = "/tmp/mini_db_bench",
+    num_items: int = 10000,
+    clean_before_each: bool = False,
+    clean_after_each: bool = False,
+) -> List[BenchResult]:
     configs = [
         (HashIndex, f"{data_root}_hash"),
         (LSMIndex, f"{data_root}_lsm"),
@@ -77,7 +96,15 @@ def run_all(data_root: str = "/tmp/mini_db_bench", num_items: int = 1000) -> Lis
     ]
     results: List[BenchResult] = []
     for ctor, dir_ in configs:
-        results.append(bench_index(ctor, dir_, num_items=num_items))
+        results.append(
+            bench_index(
+                ctor,
+                dir_,
+                num_items=num_items,
+                clean_before=clean_before_each,
+                clean_after=clean_after_each,
+            )
+        )
     return results
 
 

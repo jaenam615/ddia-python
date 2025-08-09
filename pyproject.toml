@@ -26,3 +26,6 @@ dev = [
     "twisted>=22.0.0",
     "setuptools>=80.9.0",
 ]
+
+[project.scripts]
+ch3-db = "chapter_3.mini_db.main:main"
