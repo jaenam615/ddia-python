@@ -1,0 +1,103 @@
+import os
+import json
+from chapter_3.mini_db.common.utils import pack_record, unpack_record
+from chapter_3.mini_db.common.bloom_filter import BloomFilter
+
+"""
+A very simple SSTable representation:
+- Each segment is a file "segment_{n}.sst" in provided dir.
+- Format: newline-delimited JSON index at start? (for simplicity we'll write binary record stream and a small JSON index file)
+Approach:
+ - data file: segment_{n}.data  (concatenated framed records)
+ - index file: segment_{n}.idx  (json mapping key_hex -> (offset, length))
+This is not space-efficient but simple and good for learning.
+"""
+
+class SSTableManager:
+    def __init__(self, path: str):
+        os.makedirs(path, exist_ok=True)
+        self.path = path
+        self._next_id = self._discover_next_id()
+        self.segments: list[str] = []  # list of segment base names (without extension)
+        # load existing segments and sort newest first
+        seg_nums: list[tuple[int, str]] = []
+        for fname in os.listdir(self.path):
+            if fname.startswith("segment_") and fname.endswith(".idx"):
+                base = fname[:-4]
+                try:
+                    seg_num = int(base.split("_")[1])
+                except Exception:
+                    continue
+                seg_nums.append((seg_num, base))
+        seg_nums.sort(reverse=True)
+        self.segments = [base for _, base in seg_nums]
+
+    def _discover_next_id(self) -> int:
+        existing = [int(f.split("_")[1].split(".")[0]) for f in os.listdir(self.path) if f.startswith("segment_") and f.endswith(".data")]
+        if not existing:
+            return 1
+        return max(existing) + 1
+
+    def flush_memtable(self, items: list[tuple[bytes, bytes]]) -> str:
+        """
+        items: list of (key, value) pairs. We will sort by key and write a new segment.
+        Returns base segment name.
+        """
+        if not items:
+            return ""
+        items_sorted = sorted(items, key=lambda kv: kv[0])
+        seg_id = self._next_id
+        self._next_id += 1
+        base = f"segment_{seg_id}"
+        data_path = os.path.join(self.path, base + ".data")
+        idx_path = os.path.join(self.path, base + ".idx")
+        bloom_path = os.path.join(self.path, base + ".bloom")
+        idx = {}
+        offset = 0
+        keys_for_bloom: list[bytes] = []
+        with open(data_path, "wb") as df:
+            for k, v in items_sorted:
+                rec = pack_record(k, v)
+                df.write(rec)
+                idx[k.hex()] = (offset, len(rec))
+                offset += len(rec)
+                keys_for_bloom.append(k)
+        # write index as json (mapping key_hex -> [offset,length])
+        with open(idx_path, "w", encoding="utf-8") as ix:
+            json.dump(idx, ix)
+        # build and write bloom filter
+        bf = BloomFilter.from_keys(keys_for_bloom, false_positive_rate=0.01)
+        bf.save_json(bloom_path)
+        self.segments.insert(0, base)  # newest first for lookup
+        return base
+
+    def lookup_in_segment(self, base: str, key: bytes) -> bytes | None:
+        data_path = os.path.join(self.path, base + ".data")
+        idx_path = os.path.join(self.path, base + ".idx")
+        bloom_path = os.path.join(self.path, base + ".bloom")
+        if not os.path.exists(idx_path):
+            return None
+        # Bloom filter short-circuit for misses
+        if os.path.exists(bloom_path):
+            bf = BloomFilter.load_json(bloom_path)
+            if not bf.might_contain(key):
+                return None
+        with open(idx_path, "r", encoding="utf-8") as ix:
+            idx = json.load(ix)
+        khex = key.hex()
+        if khex not in idx:
+            return None
+        offset, length = idx[khex]
+        with open(data_path, "rb") as df:
+            df.seek(offset)
+            rec = df.read(length)
+            k, v = unpack_record(rec)
+            return v
+
+    def lookup(self, key: bytes) -> bytes | None:
+        # search segments newest -> oldest
+        for base in self.segments:
+            val = self.lookup_in_segment(base, key)
+            if val is not None:
+                return val
+        return None
