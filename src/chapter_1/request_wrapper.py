@@ -1,9 +1,9 @@
 import asyncio
-from httpx import Response, RequestError
+from httpx import Response, RequestError, AsyncClient
 
 
 class RequestWrapper:
-    def __init__(self, client):
+    def __init__(self, client: AsyncClient):
         self._client = client
         self._backoff_factor = 0.5
         self._max_retries = 3
@@ -13,7 +13,7 @@ class RequestWrapper:
 
         while number_of_retries < self._max_retries:
             try:
-                response = await self._client.request(method, url, **kwargs)
+                response = await self._client.request(method=method, url=url, **kwargs)
 
                 if not self._needs_retry(response):
                     return response
